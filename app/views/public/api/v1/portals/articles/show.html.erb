@@ -17,17 +17,21 @@
     <div>
       <a
         class="text-slate-700 hover:underline leading-8 text-sm font-semibold"
-        href="/hc/<%= @portal.slug %>/<%= @article.category.locale %>"
+        href="/hc/<%= @portal.slug %>/<%= @article.category&.locale %>"
       >
         Home
       </a>
       <span class="text-xs text-slate-600 px-1">/</span>
-      <a
-        class="text-slate-700 hover:underline leading-8 text-sm font-semibold"
-        href="/hc/<%= @portal.slug %>/<%= @article.category.locale %>/categories/<%= @article.category.slug %>"
-      >
-        <%= @article.category.name %>
-      </a>
+      <% if @article.category %>
+        <a
+          class="text-slate-700 hover:underline leading-8 text-sm font-semibold"
+          href="/hc/<%= @portal.slug %>/<%= @article.category.locale %>/categories/<%= @article.category.slug %>"
+        >
+          <%= @article.category&.name %>
+        </a>
+      <% else %>
+        <span class="text-slate-700 leading-8 text-sm font-semibold" > Uncategorized </span>
+      <% end %>
     </div>
     <h1 class="text-3xl font-semibold md:tracking-normal leading-snug md:text-4xl text-slate-900">
       <%= @article.title %>
@@ -35,7 +39,9 @@
     <div class="flex flex-col items-start justify-between w-full md:flex-row md:items-center pt-2">
       <div class="flex items-center space-x-2">
         <% if @article.author&.avatar_url&.present? %>
-          <img src="<%= @article.author.avatar_url %>" alt="<%= @article.author.display_name %>" class="w-12 h-12 border rounded-full pr-1">
+          <div class="pr-1">
+            <img src="<%= @article.author.avatar_url %>" alt="<%= @article.author.display_name %>" class="w-12 h-12 border rounded-full">
+          </div>
         <% end %>
         <div>
           <h5 class="text-base font-medium text-slate-900 mb-2"><%= @article.author.available_name %></h5>

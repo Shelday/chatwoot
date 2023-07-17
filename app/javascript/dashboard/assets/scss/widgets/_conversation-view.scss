@@ -29,13 +29,13 @@
     }
 
     .modal-image {
-      max-height: 90%;
-      max-width: 90%;
+      max-height: 76vh;
+      max-width: 76vw;
     }
 
     .modal-video {
-      max-height: 75vh;
-      max-width: 100%;
+      max-height: 76vh;
+      max-width: 76vw;
     }
 
     &::before {
@@ -51,16 +51,6 @@
       opacity: 0.8;
       position: absolute;
       width: 100%;
-    }
-  }
-
-  .video {
-    .modal-container {
-      width: auto;
-
-      .modal--close {
-        z-index: var(--z-index-low);
-      }
     }
   }
 }
@@ -283,7 +273,7 @@
   }
 
   .wrap {
-    --bubble-max-width: 49.6rem;
+    --bubble-max-width: 31rem;
     margin: $zero $space-normal;
     max-width: Min(var(--bubble-max-width), 84%);
 
@@ -401,3 +391,41 @@
   }
 }
 
+.conversation-sidebar-wrap {
+  flex: 0 0;
+  flex-basis: 100%;
+  height: auto;
+  overflow: auto;
+  z-index: var(--z-index-low);
+
+  @include breakpoint(medium up) {
+    flex-basis: 17.5rem;
+  }
+
+  @include breakpoint(large up) {
+    flex-basis: 18.75rem;
+  }
+
+  @include breakpoint(xlarge up) {
+    flex-basis: 19.375rem;
+  }
+
+  @include breakpoint(xxlarge up) {
+    flex-basis: 20.625rem;
+  }
+
+  @include breakpoint(xxxlarge up) {
+    flex-basis: 25rem;
+  }
+}
+
+
+.activity-wrap {
+  .message-text--metadata {
+    .time {
+      @include breakpoint(xlarge up) {
+        margin-left: var(--space-small);
+      }
+    }
+  }
+}

@@ -1,6 +1,8 @@
 <template>
-  <div class="conv-header">
-    <div class="conversation-header--details">
+  <div class="conv-header flex-col md:flex-row">
+    <div
+      class="flex-1 w-100 flex flex-col md:flex-row items-center justify-center"
+    >
       <div class="user">
         <back-button v-if="showBackButton" :back-url="backButtonUrl" />
         <Thumbnail
@@ -44,7 +46,7 @@
         </div>
       </div>
       <div
-        class="header-actions-wrap"
+        class="header-actions-wrap mt-3 lg:mt-0"
         :class="{ 'has-open-sidebar': isContactPanelOpen }"
       >
         <more-actions :conversation-id="currentChat.id" />
@@ -57,7 +59,6 @@ import { hasPressedAltAndOKey } from 'shared/helpers/KeyboardHelpers';
 import { mapGetters } from 'vuex';
 import agentMixin from '../../../mixins/agentMixin.js';
 import BackButton from '../BackButton';
-import differenceInHours from 'date-fns/differenceInHours';
 import eventListenerMixins from 'shared/mixins/eventListenerMixins';
 import inboxMixin from 'shared/mixins/inboxMixin';
 import InboxName from '../InboxName';
@@ -65,6 +66,8 @@ import MoreActions from './MoreActions';
 import Thumbnail from '../Thumbnail';
 import wootConstants from 'dashboard/constants/globals';
 import { conversationListPageURL } from 'dashboard/helper/URLHelper';
+import { conversationReopenTime } from 'dashboard/helper/snoozeHelpers';
+
 export default {
   components: {
     BackButton,
@@ -125,17 +128,9 @@ export default {
     snoozedDisplayText() {
       const { snoozed_until: snoozedUntil } = this.currentChat;
       if (snoozedUntil) {
-        // When the snooze is applied, it schedules the unsnooze event to next day/week 9AM.
-        // By that logic if the time difference is less than or equal to 24 + 9 hours we can consider it tomorrow.
-        const MAX_TIME_DIFFERENCE = 33;
-        const isSnoozedUntilTomorrow =
-          differenceInHours(new Date(snoozedUntil), new Date()) <=
-          MAX_TIME_DIFFERENCE;
-        return this.$t(
-          isSnoozedUntilTomorrow
-            ? 'CONVERSATION.HEADER.SNOOZED_UNTIL_TOMORROW'
-            : 'CONVERSATION.HEADER.SNOOZED_UNTIL_NEXT_WEEK'
-        );
+        return `${this.$t(
+          'CONVERSATION.HEADER.SNOOZED_UNTIL'
+        )} ${conversationReopenTime(snoozedUntil)}`;
       }
       return this.$t('CONVERSATION.HEADER.SNOOZED_UNTIL_NEXT_REPLY');
     },
@@ -166,27 +161,9 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '~dashboard/assets/scss/woot';
-
 .conv-header {
   flex: 0 0 var(--space-jumbo);
   flex-direction: row;
-
-  @include breakpoint(medium up) {
-    flex-direction: column;
-  }
-}
-
-.conversation-header--details {
-  display: flex;
-  justify-content: center;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
-
-  @include breakpoint(medium up) {
-    flex-direction: row;
-  }
 }
 
 .option__desc {

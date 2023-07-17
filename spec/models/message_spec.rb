@@ -3,7 +3,7 @@
 require 'rails_helper'
 require Rails.root.join 'spec/models/concerns/liquidable_shared.rb'
 
-RSpec.describe Message, type: :model do
+RSpec.describe Message do
   context 'with validations' do
     it { is_expected.to validate_presence_of(:inbox_id) }
     it { is_expected.to validate_presence_of(:conversation_id) }
@@ -21,7 +21,10 @@ RSpec.describe Message, type: :model do
 
       it 'invalid when crossed the limit' do
         message.content = 'a' * 150_001
+        message.processed_message_content = 'a' * 150_001
         message.valid?
+
+        expect(message.errors[:processed_message_content]).to include('is too long (maximum is 150000 characters)')
         expect(message.errors[:content]).to include('is too long (maximum is 150000 characters)')
       end
     end
@@ -29,6 +32,67 @@ RSpec.describe Message, type: :model do
 
   describe 'concerns' do
     it_behaves_like 'liqudable'
+  end
+
+  describe 'message_filter_helpers' do
+    context 'when webhook_sendable?' do
+      [
+        { type: :incoming, expected: true },
+        { type: :outgoing, expected: true },
+        { type: :template, expected: true },
+        { type: :activity, expected: false }
+      ].each do |scenario|
+        it "returns #{scenario[:expected]} for #{scenario[:type]} message" do
+          message = create(:message, message_type: scenario[:type])
+          expect(message.webhook_sendable?).to eq(scenario[:expected])
+        end
+      end
+    end
+  end
+
+  describe '#push_event_data' do
+    subject(:push_event_data) { message.push_event_data }
+
+    let(:message) { create(:message, echo_id: 'random-echo_id') }
+
+    let(:expected_data) do
+      {
+
+        account_id: message.account_id,
+        additional_attributes: message.additional_attributes,
+        content_attributes: message.content_attributes,
+        content_type: message.content_type,
+        content: message.content,
+        conversation_id: message.conversation.display_id,
+        created_at: message.created_at.to_i,
+        external_source_ids: message.external_source_ids,
+        id: message.id,
+        inbox_id: message.inbox_id,
+        message_type: message.message_type_before_type_cast,
+        private: message.private,
+        processed_message_content: message.processed_message_content,
+        sender_id: message.sender_id,
+        sender_type: message.sender_type,
+        source_id: message.source_id,
+        status: message.status,
+        updated_at: message.updated_at,
+        conversation: {
+          assignee_id: message.conversation.assignee_id,
+          contact_inbox: {
+            source_id: message.conversation.contact_inbox.source_id
+          },
+          last_activity_at: message.conversation.last_activity_at.to_i,
+          unread_count: message.conversation.unread_incoming_messages.count
+        },
+        sentiment: {},
+        sender: message.sender.push_event_data,
+        echo_id: 'random-echo_id'
+      }
+    end
+
+    it 'returns push event payload' do
+      expect(push_event_data).to eq(expected_data)
+    end
   end
 
   describe 'Check if message is a valid first reply' do
@@ -119,11 +183,42 @@ RSpec.describe Message, type: :model do
     end
   end
 
+  describe '#waiting since' do
+    let(:conversation) { create(:conversation) }
+    let(:agent) { create(:user, account: conversation.account) }
+    let(:message) { build(:message, conversation: conversation) }
+
+    it 'resets the waiting_since if an agent sent a reply' do
+      message.message_type = :outgoing
+      message.sender = agent
+      message.save!
+
+      expect(conversation.waiting_since).to be_nil
+    end
+
+    it 'sets the waiting_since if there is an incoming message' do
+      conversation.update(waiting_since: nil)
+      message.message_type = :incoming
+      message.save!
+
+      expect(conversation.waiting_since).not_to be_nil
+    end
+
+    it 'does not overwrite the previous value if there are newer messages' do
+      old_waiting_since = conversation.waiting_since
+      message.message_type = :incoming
+      message.save!
+      conversation.reload
+
+      expect(conversation.waiting_since).to eq old_waiting_since
+    end
+  end
+
   context 'with webhook_data' do
     it 'contains the message attachment when attachment is present' do
       message = create(:message)
       attachment = message.attachments.new(account_id: message.account_id, file_type: :image)
-      attachment.file.attach(io: File.open(Rails.root.join('spec/assets/avatar.png')), filename: 'avatar.png', content_type: 'image/png')
+      attachment.file.attach(io: Rails.root.join('spec/assets/avatar.png').open, filename: 'avatar.png', content_type: 'image/png')
       attachment.save!
       expect(message.webhook_data.key?(:attachments)).to be true
     end
@@ -148,12 +243,12 @@ RSpec.describe Message, type: :model do
 
     it 'triggers ::MessageTemplates::HookExecutionService' do
       hook_execution_service = double
-      allow(::MessageTemplates::HookExecutionService).to receive(:new).and_return(hook_execution_service)
+      allow(MessageTemplates::HookExecutionService).to receive(:new).and_return(hook_execution_service)
       allow(hook_execution_service).to receive(:perform).and_return(true)
 
       message.save!
 
-      expect(::MessageTemplates::HookExecutionService).to have_received(:new).with(message: message)
+      expect(MessageTemplates::HookExecutionService).to have_received(:new).with(message: message)
       expect(hook_execution_service).to have_received(:perform)
     end
 
@@ -185,6 +280,7 @@ RSpec.describe Message, type: :model do
         message.inbox = create(:inbox, account: message.account, channel: build(:channel_email, account: message.account))
         allow(EmailReplyWorker).to receive(:perform_in).and_return(true)
         message.message_type = 'outgoing'
+        message.content_attributes = { email: { text_content: { quoted: 'quoted text' } } }
         message.save!
         expect(EmailReplyWorker).to have_received(:perform_in).with(1.second, message.id)
       end
@@ -207,13 +303,22 @@ RSpec.describe Message, type: :model do
     end
   end
 
+  context 'when processed_message_content is blank' do
+    let(:message) { build(:message, content_type: :text, account: create(:account), content: 'Processed message content') }
+
+    it 'sets content_type as text' do
+      message.save!
+      expect(message.processed_message_content).to eq message.content
+    end
+  end
+
   context 'when attachments size maximum' do
     let(:message) { build(:message, content_type: nil, account: create(:account)) }
 
     it 'add errors to message for attachment size is more than allowed limit' do
       16.times.each do
         attachment = message.attachments.new(account_id: message.account_id, file_type: :image)
-        attachment.file.attach(io: File.open(Rails.root.join('spec/assets/avatar.png')), filename: 'avatar.png', content_type: 'image/png')
+        attachment.file.attach(io: Rails.root.join('spec/assets/avatar.png').open, filename: 'avatar.png', content_type: 'image/png')
       end
 
       expect(message.errors.messages).to eq({ attachments: ['exceeded maximum allowed'] })
