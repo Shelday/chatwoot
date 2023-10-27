@@ -5,6 +5,11 @@ require Rails.root.join 'spec/models/concerns/assignment_handler_shared.rb'
 require Rails.root.join 'spec/models/concerns/auto_assignment_handler_shared.rb'
 
 RSpec.describe Conversation do
+  after do
+    Current.user = nil
+    Current.account = nil
+  end
+
   describe 'associations' do
     it { is_expected.to belong_to(:account) }
     it { is_expected.to belong_to(:inbox) }
@@ -497,6 +502,12 @@ RSpec.describe Conversation do
     it 'returns unread incoming messages' do
       expect(unread_incoming_messages).to contain_exactly(message)
     end
+
+    it 'returns unread incoming messages even if the agent has not seen the conversation' do
+      conversation.update!(agent_last_seen_at: nil)
+
+      expect(unread_incoming_messages).to contain_exactly(message)
+    end
   end
 
   describe '#push_event_data' do
@@ -544,6 +555,11 @@ RSpec.describe Conversation do
 
     it 'returns conversation status as pending' do
       expect(conversation.status).to eq('pending')
+    end
+
+    it 'returns conversation as open if campaign is present' do
+      conversation = create(:conversation, inbox: bot_inbox.inbox, campaign: create(:campaign))
+      expect(conversation.status).to eq('open')
     end
   end
 

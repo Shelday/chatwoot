@@ -64,15 +64,15 @@ module.exports = {
       },
       yellow: {
         50: yellow.yellow2,
-        100: yellow.yellow4,
+        100: yellow.yellow3,
         200: yellow.yellow5,
         300: yellowDark.yellow10,
         400: yellowDark.yellow9,
         500: yellowDark.yellow11,
         600: yellow.yellow8,
-        700: yellow.yellow11,
-        800: yellowDark.yellow8,
-        900: yellowDark.yellow7,
+        700: yellowDark.yellow7,
+        800: yellowDark.yellow2,
+        900: yellowDark.yellow1,
       },
       slate: {
         25: slate.slate2,
@@ -138,10 +138,16 @@ module.exports = {
         '90%': { transform: 'translateX(-0.375rem)' },
         '100%': { transform: 'translateX(0)' },
       },
+      'loader-pulse': {
+        '0%': { opacity: 0.4 },
+        '50%': { opacity: 1 },
+        '100%': { opacity: 0.4 },
+      },
     },
     animation: {
       ...defaultTheme.animation,
       wiggle: 'wiggle 0.5s ease-in-out',
+      'loader-pulse': 'loader-pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
     },
   },
   plugins: [
