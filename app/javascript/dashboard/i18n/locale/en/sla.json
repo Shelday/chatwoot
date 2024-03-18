@@ -24,20 +24,23 @@
         "PLACEHOLDER": "SLA for premium customers"
       },
       "FIRST_RESPONSE_TIME": {
-        "LABEL": "First Response Time(Seconds)",
-        "PLACEHOLDER": "300 for 5 minutes"
+        "LABEL": "First Response Time",
+        "PLACEHOLDER": "5"
       },
       "NEXT_RESPONSE_TIME": {
-        "LABEL": "Next Response Time(Seconds)",
-        "PLACEHOLDER": "600 for 10 minutes"
+        "LABEL": "Next Response Time",
+        "PLACEHOLDER": "5"
       },
       "RESOLUTION_TIME": {
-        "LABEL": "Resolution Time(Seconds)",
-        "PLACEHOLDER": "86400 for 1 day"
+        "LABEL": "Resolution Time",
+        "PLACEHOLDER": "60"
       },
       "BUSINESS_HOURS": {
         "LABEL": "Business Hours",
         "PLACEHOLDER": "Only during business hours"
+      },
+      "THRESHOLD_TIME": {
+        "INVALID_FORMAT_ERROR": "Threshold should be a number and greater than zero"
       },
       "EDIT": "Edit",
       "CREATE": "Create",
@@ -52,11 +55,17 @@
         "ERROR_MESSAGE": "There was an error, please try again"
       }
     },
-    "EDIT": {
-      "TITLE": "Edit SLA",
+    "DELETE": {
+      "TITLE": "Delete SLA",
       "API": {
-        "SUCCESS_MESSAGE": "SLA updated successfully",
+        "SUCCESS_MESSAGE": "SLA deleted successfully",
         "ERROR_MESSAGE": "There was an error, please try again"
+      },
+      "CONFIRM": {
+        "TITLE": "Confirm Deletion",
+        "MESSAGE": "Are you sure you want to delete ",
+        "YES": "Yes, Delete ",
+        "NO": "No, Keep "
       }
     }
   }

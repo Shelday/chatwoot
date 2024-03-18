@@ -9,7 +9,7 @@
       {{ $t('SLA.HEADER_BTN_TXT') }}
     </woot-button>
     <div class="flex flex-row gap-4">
-      <div class="w-[60%]">
+      <div class="w-full xl:w-3/5">
         <p
           v-if="!uiFlags.isFetching && !records.length"
           class="flex h-full items-center flex-col justify-center"
@@ -38,17 +38,17 @@
               <td>{{ sla.description }}</td>
               <td>
                 <span class="flex items-center">
-                  {{ sla.first_response_time_threshold }}
+                  {{ displayTime(sla.first_response_time_threshold) }}
                 </span>
               </td>
               <td>
                 <span class="flex items-center">
-                  {{ sla.next_response_time_threshold }}
+                  {{ displayTime(sla.next_response_time_threshold) }}
                 </span>
               </td>
               <td>
                 <span class="flex items-center">
-                  {{ sla.resolution_time_threshold }}
+                  {{ displayTime(sla.resolution_time_threshold) }}
                 </span>
               </td>
               <td>
@@ -58,14 +58,14 @@
               </td>
               <td class="button-wrapper">
                 <woot-button
-                  v-tooltip.top="$t('SLA.FORM.EDIT')"
+                  v-tooltip.top="$t('SLA.FORM.DELETE')"
                   variant="smooth"
+                  color-scheme="alert"
                   size="tiny"
-                  color-scheme="secondary"
+                  icon="dismiss-circle"
                   class-names="grey-btn"
                   :is-loading="loading[sla.id]"
-                  icon="edit"
-                  @click="openEditPopup(sla)"
+                  @click="openDeletePopup(sla)"
                 />
               </td>
             </tr>
@@ -73,7 +73,7 @@
         </table>
       </div>
 
-      <div class="w-[34%]">
+      <div class="w-1/3 hidden xl:block">
         <span v-dompurify-html="$t('SLA.SIDEBAR_TXT')" />
       </div>
     </div>
@@ -81,29 +81,35 @@
       <add-SLA @close="hideAddPopup" />
     </woot-modal>
 
-    <woot-modal :show.sync="showEditPopup" :on-close="hideEditPopup">
-      <edit-SLA :selected-response="selectedResponse" @close="hideEditPopup" />
-    </woot-modal>
+    <woot-delete-modal
+      :show.sync="showDeleteConfirmationPopup"
+      :on-close="closeDeletePopup"
+      :on-confirm="confirmDeletion"
+      :title="$t('SLA.DELETE.CONFIRM.TITLE')"
+      :message="$t('SLA.DELETE.CONFIRM.MESSAGE')"
+      :message-value="deleteMessage"
+      :confirm-text="deleteConfirmText"
+      :reject-text="deleteRejectText"
+    />
   </div>
 </template>
 <script>
 import { mapGetters } from 'vuex';
+import { convertSecondsToTimeUnit } from '@chatwoot/utils';
 
 import AddSLA from './AddSLA.vue';
-import EditSLA from './EditSLA.vue';
 import alertMixin from 'shared/mixins/alertMixin';
 
 export default {
   components: {
     AddSLA,
-    EditSLA,
   },
   mixins: [alertMixin],
   data() {
     return {
       loading: {},
       showAddPopup: false,
-      showEditPopup: false,
+      showDeleteConfirmationPopup: false,
       selectedResponse: {},
     };
   },
@@ -111,38 +117,60 @@ export default {
     ...mapGetters({
       records: 'sla/getSLA',
       uiFlags: 'sla/getUIFlags',
-      accountId: 'getCurrentAccountId',
-      isFeatureEnabledonAccount: 'accounts/isFeatureEnabledonAccount',
     }),
-    isSLAEnabled() {
-      return this.isFeatureEnabledonAccount(this.accountId, 'sla');
+    deleteConfirmText() {
+      return this.$t('SLA.DELETE.CONFIRM.YES');
+    },
+    deleteRejectText() {
+      return this.$t('SLA.DELETE.CONFIRM.NO');
+    },
+    deleteMessage() {
+      return ` ${this.selectedResponse.name}`;
     },
   },
   mounted() {
-    this.isSLAfeatureEnabled();
+    this.$store.dispatch('sla/get');
   },
   methods: {
-    isSLAfeatureEnabled() {
-      if (!this.isSLAEnabled) {
-        this.$router.push({
-          name: 'general_settings_index',
-        });
-      } else {
-        this.$store.dispatch('sla/get');
-      }
-    },
     openAddPopup() {
       this.showAddPopup = true;
     },
     hideAddPopup() {
       this.showAddPopup = false;
     },
-    openEditPopup(response) {
-      this.showEditPopup = true;
+    openDeletePopup(response) {
+      this.showDeleteConfirmationPopup = true;
       this.selectedResponse = response;
     },
-    hideEditPopup() {
-      this.showEditPopup = false;
+    closeDeletePopup() {
+      this.showDeleteConfirmationPopup = false;
+    },
+    confirmDeletion() {
+      this.loading[this.selectedResponse.id] = true;
+      this.closeDeletePopup();
+      this.deleteSla(this.selectedResponse.id);
+    },
+    deleteSla(id) {
+      this.$store
+        .dispatch('sla/delete', id)
+        .then(() => {
+          this.showAlert(this.$t('SLA.DELETE.API.SUCCESS_MESSAGE'));
+        })
+        .catch(() => {
+          this.showAlert(this.$t('SLA.DELETE.API.ERROR_MESSAGE'));
+        })
+        .finally(() => {
+          this.loading[this.selectedResponse.id] = false;
+        });
+    },
+    displayTime(threshold) {
+      const { time, unit } = convertSecondsToTimeUnit(threshold, {
+        minute: 'm',
+        hour: 'h',
+        day: 'd',
+      });
+      if (!time) return '-';
+      return `${time}${unit}`;
     },
   },
 };
