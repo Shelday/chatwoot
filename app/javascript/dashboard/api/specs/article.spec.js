@@ -14,10 +14,10 @@ describe('#PortalAPI', () => {
   describe('API calls', () => {
     const originalAxios = window.axios;
     const axiosMock = {
-      post: jest.fn(() => Promise.resolve()),
-      get: jest.fn(() => Promise.resolve()),
-      patch: jest.fn(() => Promise.resolve()),
-      delete: jest.fn(() => Promise.resolve()),
+      post: vi.fn(() => Promise.resolve()),
+      get: vi.fn(() => Promise.resolve()),
+      patch: vi.fn(() => Promise.resolve()),
+      delete: vi.fn(() => Promise.resolve()),
     };
 
     beforeEach(() => {
@@ -37,17 +37,18 @@ describe('#PortalAPI', () => {
         authorId: '1',
       });
       expect(axiosMock.get).toHaveBeenCalledWith(
-        '/api/v1/portals/room-rental/articles?page=1&locale=en-US&status=published&author_id=1'
+        '/api/v1/portals/room-rental/articles?page=1&locale=en-US&status=published&author_id=1',
+        { signal: undefined }
       );
     });
   });
   describe('API calls', () => {
     const originalAxios = window.axios;
     const axiosMock = {
-      post: jest.fn(() => Promise.resolve()),
-      get: jest.fn(() => Promise.resolve()),
-      patch: jest.fn(() => Promise.resolve()),
-      delete: jest.fn(() => Promise.resolve()),
+      post: vi.fn(() => Promise.resolve()),
+      get: vi.fn(() => Promise.resolve()),
+      patch: vi.fn(() => Promise.resolve()),
+      delete: vi.fn(() => Promise.resolve()),
     };
 
     beforeEach(() => {
@@ -71,10 +72,10 @@ describe('#PortalAPI', () => {
   describe('API calls', () => {
     const originalAxios = window.axios;
     const axiosMock = {
-      post: jest.fn(() => Promise.resolve()),
-      get: jest.fn(() => Promise.resolve()),
-      patch: jest.fn(() => Promise.resolve()),
-      delete: jest.fn(() => Promise.resolve()),
+      post: vi.fn(() => Promise.resolve()),
+      get: vi.fn(() => Promise.resolve()),
+      patch: vi.fn(() => Promise.resolve()),
+      delete: vi.fn(() => Promise.resolve()),
     };
 
     beforeEach(() => {
@@ -98,10 +99,10 @@ describe('#PortalAPI', () => {
   describe('API calls', () => {
     const originalAxios = window.axios;
     const axiosMock = {
-      post: jest.fn(() => Promise.resolve()),
-      get: jest.fn(() => Promise.resolve()),
-      patch: jest.fn(() => Promise.resolve()),
-      delete: jest.fn(() => Promise.resolve()),
+      post: vi.fn(() => Promise.resolve()),
+      get: vi.fn(() => Promise.resolve()),
+      patch: vi.fn(() => Promise.resolve()),
+      delete: vi.fn(() => Promise.resolve()),
     };
 
     beforeEach(() => {
@@ -129,10 +130,10 @@ describe('#PortalAPI', () => {
   describe('API calls', () => {
     const originalAxios = window.axios;
     const axiosMock = {
-      post: jest.fn(() => Promise.resolve()),
-      get: jest.fn(() => Promise.resolve()),
-      patch: jest.fn(() => Promise.resolve()),
-      delete: jest.fn(() => Promise.resolve()),
+      post: vi.fn(() => Promise.resolve()),
+      get: vi.fn(() => Promise.resolve()),
+      patch: vi.fn(() => Promise.resolve()),
+      delete: vi.fn(() => Promise.resolve()),
     };
 
     beforeEach(() => {
@@ -150,6 +151,35 @@ describe('#PortalAPI', () => {
       });
       expect(axiosMock.delete).toHaveBeenCalledWith(
         '/api/v1/portals/room-rental/articles/1'
+      );
+    });
+  });
+  describe('API calls', () => {
+    const originalAxios = window.axios;
+    const axiosMock = {
+      post: vi.fn(() => Promise.resolve()),
+      get: vi.fn(() => Promise.resolve()),
+      patch: vi.fn(() => Promise.resolve()),
+      delete: vi.fn(() => Promise.resolve()),
+    };
+
+    beforeEach(() => {
+      window.axios = axiosMock;
+    });
+
+    afterEach(() => {
+      window.axios = originalAxios;
+    });
+
+    it('#bulkUpdateCategory', () => {
+      articlesAPI.bulkUpdateCategory({
+        portalSlug: 'room-rental',
+        articleIds: [1, 2, 3],
+        categoryId: 7,
+      });
+      expect(axiosMock.patch).toHaveBeenCalledWith(
+        '/api/v1/portals/room-rental/articles/bulk_actions/update_category',
+        { ids: [1, 2, 3], category_id: 7 }
       );
     });
   });

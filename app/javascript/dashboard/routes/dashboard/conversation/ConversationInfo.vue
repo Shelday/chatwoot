@@ -1,8 +1,11 @@
 <script setup>
 import { computed } from 'vue';
+import { getUnixTime } from 'date-fns';
 import { getLanguageName } from 'dashboard/components/widgets/conversation/advancedFilterItems/languages';
+import { useExactTimestamp } from 'shared/composables/useExactTimestamp';
 import ContactDetailsItem from './ContactDetailsItem.vue';
 import CustomAttributes from './customAttributes/CustomAttributes.vue';
+
 const props = defineProps({
   conversationAttributes: {
     type: Object,
@@ -15,9 +18,21 @@ const props = defineProps({
 });
 
 const referer = computed(() => props.conversationAttributes.referer);
-const initiatedAt = computed(
-  () => props.conversationAttributes.initiated_at?.timestamp
-);
+
+const exactTimestamp = useExactTimestamp({ showTimeZone: true });
+
+// Stored as a raw string: the visitor's `Date.toString()` for widget
+// conversations and a UTC time for email ones. Re-render it in the agent's
+// own timezone and locale; fall back to the raw value when unparseable.
+const initiatedAt = computed(() => {
+  const timestamp = props.conversationAttributes.initiated_at?.timestamp;
+  if (!timestamp) return '';
+
+  const initiatedDate = new Date(timestamp);
+  if (Number.isNaN(initiatedDate.getTime())) return timestamp;
+
+  return exactTimestamp(getUnixTime(initiatedDate));
+});
 
 const browserInfo = computed(() => props.conversationAttributes.browser);
 
@@ -46,27 +61,38 @@ const staticElements = computed(() =>
     {
       content: initiatedAt,
       title: 'CONTACT_PANEL.INITIATED_AT',
+      key: 'static-initiated-at',
+      type: 'static_attribute',
     },
     {
       content: browserLanguage,
       title: 'CONTACT_PANEL.BROWSER_LANGUAGE',
+      key: 'static-browser-language',
+      type: 'static_attribute',
     },
     {
       content: referer,
       title: 'CONTACT_PANEL.INITIATED_FROM',
-      type: 'link',
+      key: 'static-referer',
+      type: 'static_attribute',
     },
     {
       content: browserName,
       title: 'CONTACT_PANEL.BROWSER',
+      key: 'static-browser',
+      type: 'static_attribute',
     },
     {
       content: platformName,
       title: 'CONTACT_PANEL.OS',
+      key: 'static-platform',
+      type: 'static_attribute',
     },
     {
       content: createdAtIp,
       title: 'CONTACT_PANEL.IP_ADDRESS',
+      key: 'static-ip-address',
+      type: 'static_attribute',
     },
   ].filter(attribute => !!attribute.content.value)
 );
@@ -74,36 +100,29 @@ const staticElements = computed(() =>
 
 <template>
   <div class="conversation--details">
-    <ContactDetailsItem
-      v-for="element in staticElements"
-      :key="element.title"
-      :title="$t(element.title)"
-      :value="element.content.value"
-      class="conversation--attribute"
-    >
-      <a
-        v-if="element.type === 'link'"
-        :href="referer"
-        rel="noopener noreferrer nofollow"
-        target="_blank"
-        class="text-woot-400 dark:text-woot-600"
-      >
-        {{ referer }}
-      </a>
-    </ContactDetailsItem>
     <CustomAttributes
-      :class="staticElements.length % 2 === 0 ? 'even' : 'odd'"
+      :static-elements="staticElements"
       attribute-class="conversation--attribute"
       attribute-from="conversation_panel"
       attribute-type="conversation_attribute"
-    />
+    >
+      <template #staticItem="{ element }">
+        <ContactDetailsItem
+          :key="element.title"
+          :title="$t(element.title)"
+          :value="element.content.value"
+        >
+          <a
+            v-if="element.key === 'static-referer'"
+            :href="element.content.value"
+            rel="noopener noreferrer nofollow"
+            target="_blank"
+            class="text-n-brand"
+          >
+            {{ element.content.value }}
+          </a>
+        </ContactDetailsItem>
+      </template>
+    </CustomAttributes>
   </div>
 </template>
-<style scoped lang="scss">
-.conversation--attribute {
-  @apply border-slate-50 dark:border-slate-700/50 border-b border-solid;
-  &:nth-child(2n) {
-    @apply bg-slate-25 dark:bg-slate-800/50;
-  }
-}
-</style>

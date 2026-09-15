@@ -1,118 +1,64 @@
-<template>
-  <div class="grid py-16 px-5 font-inter mx-auto gap-16 sm:max-w-[720px]">
-    <div class="flex flex-col gap-6">
-      <h2 class="text-2xl font-medium text-ash-900">
-        {{ $t('PROFILE_SETTINGS.TITLE') }}
-      </h2>
-      <user-profile-picture
-        :src="avatarUrl"
-        :name="name"
-        size="72px"
-        @change="updateProfilePicture"
-        @delete="deleteProfilePicture"
-      />
-      <user-basic-details
-        :name="name"
-        :display-name="displayName"
-        :email="email"
-        :email-enabled="!globalConfig.disableUserProfileUpdate"
-        @update-user="updateProfile"
-      />
-    </div>
-
-    <form-section
-      :title="$t('PROFILE_SETTINGS.FORM.MESSAGE_SIGNATURE_SECTION.TITLE')"
-      :description="$t('PROFILE_SETTINGS.FORM.MESSAGE_SIGNATURE_SECTION.NOTE')"
-    >
-      <message-signature
-        :message-signature="messageSignature"
-        @update-signature="updateSignature"
-      />
-    </form-section>
-    <form-section
-      :title="$t('PROFILE_SETTINGS.FORM.SEND_MESSAGE.TITLE')"
-      :description="$t('PROFILE_SETTINGS.FORM.SEND_MESSAGE.NOTE')"
-    >
-      <div
-        class="flex flex-col justify-between w-full gap-5 sm:gap-4 sm:flex-row"
-      >
-        <button
-          v-for="hotKey in hotKeys"
-          :key="hotKey.key"
-          class="px-0 reset-base"
-        >
-          <hot-key-card
-            :key="hotKey.title"
-            :title="hotKey.title"
-            :description="hotKey.description"
-            :light-image="hotKey.lightImage"
-            :dark-image="hotKey.darkImage"
-            :active="isEditorHotKeyEnabled(uiSettings, hotKey.key)"
-            @click="toggleHotKey(hotKey.key)"
-          />
-        </button>
-      </div>
-    </form-section>
-    <form-section :title="$t('PROFILE_SETTINGS.FORM.PASSWORD_SECTION.TITLE')">
-      <change-password v-if="!globalConfig.disableUserProfileUpdate" />
-    </form-section>
-    <form-section
-      :title="$t('PROFILE_SETTINGS.FORM.AUDIO_NOTIFICATIONS_SECTION.TITLE')"
-      :description="
-        $t('PROFILE_SETTINGS.FORM.AUDIO_NOTIFICATIONS_SECTION.NOTE')
-      "
-    >
-      <audio-notifications />
-    </form-section>
-    <form-section :title="$t('PROFILE_SETTINGS.FORM.NOTIFICATIONS.TITLE')">
-      <notification-preferences />
-    </form-section>
-    <form-section
-      :title="$t('PROFILE_SETTINGS.FORM.ACCESS_TOKEN.TITLE')"
-      :description="
-        useInstallationName(
-          $t('PROFILE_SETTINGS.FORM.ACCESS_TOKEN.NOTE'),
-          globalConfig.installationName
-        )
-      "
-    >
-      <access-token :value="currentUser.access_token" @on-copy="onCopyToken" />
-    </form-section>
-  </div>
-</template>
 <script>
-import globalConfigMixin from 'shared/mixins/globalConfigMixin';
-import uiSettingsMixin, {
-  isEditorHotKeyEnabled,
-} from 'dashboard/mixins/uiSettings';
-import alertMixin from 'shared/mixins/alertMixin';
 import { mapGetters } from 'vuex';
+import { useAlert } from 'dashboard/composables';
+import { useUISettings } from 'dashboard/composables/useUISettings';
+import { useFontSize } from 'dashboard/composables/useFontSize';
+import { useBranding } from 'shared/composables/useBranding';
 import { clearCookiesOnLogout } from 'dashboard/store/utils/api.js';
 import { copyTextToClipboard } from 'shared/helpers/clipboard';
-
+import { parseAPIErrorResponse } from 'dashboard/store/utils/api';
+import { parseBoolean } from '@chatwoot/utils';
 import UserProfilePicture from './UserProfilePicture.vue';
 import UserBasicDetails from './UserBasicDetails.vue';
 import MessageSignature from './MessageSignature.vue';
-import HotKeyCard from './HotKeyCard.vue';
+import FontSize from './FontSize.vue';
+import UserLanguageSelect from './UserLanguageSelect.vue';
 import ChangePassword from './ChangePassword.vue';
 import NotificationPreferences from './NotificationPreferences.vue';
 import AudioNotifications from './AudioNotifications.vue';
-import FormSection from 'dashboard/components/FormSection.vue';
+import SectionLayout from '../account/components/SectionLayout.vue';
+import BaseSettingsHeader from '../components/BaseSettingsHeader.vue';
 import AccessToken from './AccessToken.vue';
+import MfaSettingsCard from './MfaSettingsCard.vue';
+import ActiveSessions from './ActiveSessions.vue';
+import Policy from 'dashboard/components/policy.vue';
+import RadioCard from 'dashboard/components-next/radioCard/RadioCard.vue';
+import {
+  ROLES,
+  CONVERSATION_PERMISSIONS,
+} from 'dashboard/constants/permissions.js';
 
 export default {
   components: {
     MessageSignature,
-    FormSection,
+    SectionLayout,
+    FontSize,
+    UserLanguageSelect,
     UserProfilePicture,
+    Policy,
     UserBasicDetails,
-    HotKeyCard,
+    RadioCard,
     ChangePassword,
     NotificationPreferences,
     AudioNotifications,
     AccessToken,
+    MfaSettingsCard,
+    ActiveSessions,
+    BaseSettingsHeader,
   },
-  mixins: [alertMixin, globalConfigMixin, uiSettingsMixin],
+  setup() {
+    const { isEditorHotKeyEnabled, updateUISettings } = useUISettings();
+    const { currentFontSize, updateFontSize } = useFontSize();
+    const { replaceInstallationName } = useBranding();
+
+    return {
+      currentFontSize,
+      updateFontSize,
+      isEditorHotKeyEnabled,
+      updateUISettings,
+      replaceInstallationName,
+    };
+  },
   data() {
     return {
       avatarFile: '',
@@ -146,6 +92,8 @@ export default {
             '/assets/images/dashboard/profile/hot-key-ctrl-enter-dark.svg',
         },
       ],
+      notificationPermissions: [...ROLES, ...CONVERSATION_PERMISSIONS],
+      audioNotificationPermissions: [...ROLES, ...CONVERSATION_PERMISSIONS],
     };
   },
   computed: {
@@ -153,7 +101,27 @@ export default {
       currentUser: 'getCurrentUser',
       currentUserId: 'getCurrentUserID',
       globalConfig: 'globalConfig/get',
+      isOnChatwootCloud: 'globalConfig/isOnChatwootCloud',
     }),
+    apiAndWebhooksEnabled() {
+      if (!this.isOnChatwootCloud) return true;
+
+      return this.currentUser.accounts.some(
+        account => account.api_and_webhooks
+      );
+    },
+    accessTokenDescription() {
+      if (!this.apiAndWebhooksEnabled) {
+        return this.$t('PROFILE_SETTINGS.FORM.ACCESS_TOKEN.PAID_PLAN_NOTE');
+      }
+
+      return this.replaceInstallationName(
+        this.$t('PROFILE_SETTINGS.FORM.ACCESS_TOKEN.NOTE')
+      );
+    },
+    isMfaEnabled() {
+      return parseBoolean(window.chatwootConfig?.isMfaEnabled);
+    },
   },
   mounted() {
     if (this.currentUserId) {
@@ -168,7 +136,6 @@ export default {
       this.displayName = this.currentUser.display_name;
       this.messageSignature = this.currentUser.message_signature;
     },
-    isEditorHotKeyEnabled,
     async dispatchUpdate(payload, successMessage, errorMessage) {
       let alertMessage = '';
       try {
@@ -177,13 +144,11 @@ export default {
 
         return true; // return the value so that the status can be known
       } catch (error) {
-        alertMessage = error?.response?.data?.error
-          ? error.response.data.error
-          : errorMessage;
+        alertMessage = parseAPIErrorResponse(error) || errorMessage;
 
         return false; // return the value so that the status can be known
       } finally {
-        this.showAlert(alertMessage);
+        useAlert(alertMessage);
       }
     },
     async updateProfile(userAttributes) {
@@ -230,9 +195,9 @@ export default {
         await this.$store.dispatch('deleteAvatar');
         this.avatarUrl = '';
         this.avatarFile = '';
-        this.showAlert(this.$t('PROFILE_SETTINGS.AVATAR_DELETE_SUCCESS'));
+        useAlert(this.$t('PROFILE_SETTINGS.AVATAR_DELETE_SUCCESS'));
       } catch (error) {
-        this.showAlert(this.$t('PROFILE_SETTINGS.AVATAR_DELETE_FAILED'));
+        useAlert(this.$t('PROFILE_SETTINGS.AVATAR_DELETE_FAILED'));
       }
     },
     toggleHotKey(key) {
@@ -240,14 +205,169 @@ export default {
         hotKey.key === key ? { ...hotKey, active: !hotKey.active } : hotKey
       );
       this.updateUISettings({ editor_message_key: key });
-      this.showAlert(
-        this.$t('PROFILE_SETTINGS.FORM.SEND_MESSAGE.UPDATE_SUCCESS')
-      );
+      useAlert(this.$t('PROFILE_SETTINGS.FORM.SEND_MESSAGE.UPDATE_SUCCESS'));
     },
     async onCopyToken(value) {
+      if (!this.apiAndWebhooksEnabled) return;
+
       await copyTextToClipboard(value);
-      this.showAlert(this.$t('COMPONENTS.CODE.COPY_SUCCESSFUL'));
+      useAlert(this.$t('COMPONENTS.CODE.COPY_SUCCESSFUL'));
+    },
+    async resetAccessToken() {
+      if (!this.apiAndWebhooksEnabled) return;
+
+      const success = await this.$store.dispatch('resetAccessToken');
+      if (success) {
+        useAlert(this.$t('PROFILE_SETTINGS.FORM.ACCESS_TOKEN.RESET_SUCCESS'));
+      } else {
+        useAlert(this.$t('PROFILE_SETTINGS.FORM.ACCESS_TOKEN.RESET_ERROR'));
+      }
     },
   },
 };
 </script>
+
+<template>
+  <div class="grid max-w-2xl ltr:mr-auto rtl:ml-auto">
+    <BaseSettingsHeader :title="$t('PROFILE_SETTINGS.TITLE')" description="" />
+    <SectionLayout title="" description="" class="!pt-0">
+      <div class="flex flex-col gap-6">
+        <UserProfilePicture
+          :src="avatarUrl"
+          :name="name"
+          @change="updateProfilePicture"
+          @delete="deleteProfilePicture"
+        />
+        <UserBasicDetails
+          :name="name"
+          :display-name="displayName"
+          :email="email"
+          :email-enabled="!globalConfig.disableUserProfileUpdate"
+          @update-user="updateProfile"
+        />
+      </div>
+    </SectionLayout>
+    <SectionLayout
+      with-border
+      :title="$t('PROFILE_SETTINGS.FORM.INTERFACE_SECTION.TITLE')"
+      :description="
+        replaceInstallationName(
+          $t('PROFILE_SETTINGS.FORM.INTERFACE_SECTION.NOTE')
+        )
+      "
+    >
+      <div class="flex flex-col gap-6 items-start">
+        <FontSize
+          :value="currentFontSize"
+          :label="$t('PROFILE_SETTINGS.FORM.INTERFACE_SECTION.FONT_SIZE.TITLE')"
+          :description="
+            $t('PROFILE_SETTINGS.FORM.INTERFACE_SECTION.FONT_SIZE.NOTE')
+          "
+          @change="updateFontSize"
+        />
+        <UserLanguageSelect
+          :label="$t('PROFILE_SETTINGS.FORM.INTERFACE_SECTION.LANGUAGE.TITLE')"
+          :description="
+            $t('PROFILE_SETTINGS.FORM.INTERFACE_SECTION.LANGUAGE.NOTE')
+          "
+        />
+      </div>
+    </SectionLayout>
+    <SectionLayout
+      with-border
+      :title="$t('PROFILE_SETTINGS.FORM.MESSAGE_SIGNATURE_SECTION.TITLE')"
+      :description="$t('PROFILE_SETTINGS.FORM.MESSAGE_SIGNATURE_SECTION.NOTE')"
+    >
+      <MessageSignature
+        :message-signature="messageSignature"
+        @update-signature="updateSignature"
+      />
+    </SectionLayout>
+    <SectionLayout
+      with-border
+      :title="$t('PROFILE_SETTINGS.FORM.SEND_MESSAGE.TITLE')"
+      :description="$t('PROFILE_SETTINGS.FORM.SEND_MESSAGE.NOTE')"
+    >
+      <div
+        class="flex flex-col justify-between w-full gap-5 sm:gap-4 sm:flex-row"
+      >
+        <RadioCard
+          v-for="hotKey in hotKeys"
+          :id="hotKey.key"
+          :key="hotKey.key"
+          :label="hotKey.title"
+          :description="hotKey.description"
+          :is-active="isEditorHotKeyEnabled(hotKey.key)"
+          class="sm:flex-1"
+          @select="toggleHotKey"
+        >
+          <img
+            :src="hotKey.lightImage"
+            :alt="`Light themed image for ${hotKey.title}`"
+            class="block object-cover w-full dark:hidden"
+          />
+          <img
+            :src="hotKey.darkImage"
+            :alt="`Dark themed image for ${hotKey.title}`"
+            class="hidden object-cover w-full dark:block"
+          />
+        </RadioCard>
+      </div>
+    </SectionLayout>
+    <SectionLayout
+      v-if="!globalConfig.disableUserProfileUpdate"
+      with-border
+      :title="$t('PROFILE_SETTINGS.FORM.PASSWORD_SECTION.TITLE')"
+      description=""
+    >
+      <ChangePassword />
+    </SectionLayout>
+    <SectionLayout
+      v-if="isMfaEnabled"
+      with-border
+      :title="$t('PROFILE_SETTINGS.FORM.SECURITY_SECTION.TITLE')"
+      :description="$t('PROFILE_SETTINGS.FORM.SECURITY_SECTION.NOTE')"
+    >
+      <MfaSettingsCard />
+    </SectionLayout>
+    <SectionLayout
+      with-border
+      :title="$t('PROFILE_SETTINGS.FORM.SESSIONS_SECTION.TITLE')"
+      :description="$t('PROFILE_SETTINGS.FORM.SESSIONS_SECTION.NOTE')"
+    >
+      <ActiveSessions />
+    </SectionLayout>
+    <Policy :permissions="audioNotificationPermissions">
+      <SectionLayout
+        with-border
+        :title="$t('PROFILE_SETTINGS.FORM.AUDIO_NOTIFICATIONS_SECTION.TITLE')"
+        :description="
+          $t('PROFILE_SETTINGS.FORM.AUDIO_NOTIFICATIONS_SECTION.NOTE')
+        "
+      >
+        <AudioNotifications />
+      </SectionLayout>
+    </Policy>
+    <Policy :permissions="notificationPermissions">
+      <SectionLayout
+        with-border
+        :title="$t('PROFILE_SETTINGS.FORM.NOTIFICATIONS.TITLE')"
+        description=""
+      >
+        <NotificationPreferences />
+      </SectionLayout>
+    </Policy>
+    <SectionLayout
+      with-border
+      :title="$t('PROFILE_SETTINGS.FORM.ACCESS_TOKEN.TITLE')"
+      :description="accessTokenDescription"
+    >
+      <AccessToken
+        :value="currentUser.access_token"
+        :disabled="!apiAndWebhooksEnabled"
+        @on-copy="onCopyToken"
+        @on-reset="resetAccessToken"
+      />
+    </SectionLayout>
+  </div>
+</template>

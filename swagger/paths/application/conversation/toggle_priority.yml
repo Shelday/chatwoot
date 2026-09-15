@@ -6,23 +6,40 @@ description: Toggles the priority of conversation
 security:
   - userApiKey: []
   - agentBotApiKey: []
-parameters:
-  - name: data
-    in: body
-    required: true
-    schema:
-      type: object
-      required:
-        - priority
-      properties:
-        priority:
-          type: string
-          enum:  ["urgent", "high", "medium", "low", "none"]
-          description: "The priority of the conversation"
+requestBody:
+  required: false
+  content:
+    application/json:
+      schema:
+        type: object
+        properties:
+          priority:
+            type: [string, "null"]
+            enum: ['urgent', 'high', 'medium', 'low', null]
+            description: 'The priority of the conversation. Omit or set to null to clear the priority.'
+            example: 'high'
 responses:
-  200:
+  '200':
     description: Success
-  404:
-    description: Conversation not found
-  401:
+  '401':
     description: Unauthorized
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/bad_request_error'
+  '404':
+    description: Conversation not found
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/bad_request_error'
+  '422':
+    description: Validation error
+    content:
+      application/json:
+        schema:
+          type: object
+          required: [error]
+          properties:
+            error:
+              type: string

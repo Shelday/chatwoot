@@ -10,15 +10,19 @@ describe('#enterpriseAccountAPI', () => {
     expect(accountAPI).toHaveProperty('update');
     expect(accountAPI).toHaveProperty('delete');
     expect(accountAPI).toHaveProperty('checkout');
+    expect(accountAPI).toHaveProperty('billingSummary');
+    expect(accountAPI).toHaveProperty('toggleDeletion');
+    expect(accountAPI).toHaveProperty('createTopupCheckout');
+    expect(accountAPI).toHaveProperty('getLimits');
   });
 
   describe('API calls', () => {
     const originalAxios = window.axios;
     const axiosMock = {
-      post: jest.fn(() => Promise.resolve()),
-      get: jest.fn(() => Promise.resolve()),
-      patch: jest.fn(() => Promise.resolve()),
-      delete: jest.fn(() => Promise.resolve()),
+      post: vi.fn(() => Promise.resolve()),
+      get: vi.fn(() => Promise.resolve()),
+      patch: vi.fn(() => Promise.resolve()),
+      delete: vi.fn(() => Promise.resolve()),
     };
 
     beforeEach(() => {
@@ -41,6 +45,54 @@ describe('#enterpriseAccountAPI', () => {
       expect(axiosMock.post).toHaveBeenCalledWith(
         '/enterprise/api/v1/subscription'
       );
+    });
+
+    it('#billingSummary', () => {
+      accountAPI.billingSummary({ refresh: true });
+      expect(axiosMock.get).toHaveBeenCalledWith(
+        '/enterprise/api/v1/billing_summary',
+        { params: { refresh: true } }
+      );
+    });
+
+    it('#toggleDeletion with delete action', () => {
+      accountAPI.toggleDeletion('delete');
+      expect(axiosMock.post).toHaveBeenCalledWith(
+        '/enterprise/api/v1/toggle_deletion',
+        { action_type: 'delete' }
+      );
+    });
+
+    it('#toggleDeletion with undelete action', () => {
+      accountAPI.toggleDeletion('undelete');
+      expect(axiosMock.post).toHaveBeenCalledWith(
+        '/enterprise/api/v1/toggle_deletion',
+        { action_type: 'undelete' }
+      );
+    });
+
+    it('#createTopupCheckout with credits', () => {
+      accountAPI.createTopupCheckout(1000);
+      expect(axiosMock.post).toHaveBeenCalledWith(
+        '/enterprise/api/v1/topup_checkout',
+        { credits: 1000 }
+      );
+    });
+
+    it('#createTopupCheckout with different credit amounts', () => {
+      const creditAmounts = [1000, 2500, 6000, 12000];
+      creditAmounts.forEach(credits => {
+        accountAPI.createTopupCheckout(credits);
+        expect(axiosMock.post).toHaveBeenCalledWith(
+          '/enterprise/api/v1/topup_checkout',
+          { credits }
+        );
+      });
+    });
+
+    it('#getLimits', () => {
+      accountAPI.getLimits();
+      expect(axiosMock.get).toHaveBeenCalledWith('/enterprise/api/v1/limits');
     });
   });
 });

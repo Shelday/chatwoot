@@ -4,7 +4,6 @@ import { differenceInSeconds } from 'date-fns';
 import {
   isAConversationRoute,
   isAInboxViewRoute,
-  isNotificationRoute,
 } from 'dashboard/helper/routeHelpers';
 
 const MAX_DISCONNECT_SECONDS = 10800;
@@ -46,21 +45,24 @@ class ReconnectService {
 
   fetchConversations = async () => {
     await this.store.dispatch('updateChatListFilters', {
-      page: null,
-      updatedWithin: this.getSecondsSinceDisconnect(),
-    });
-    await this.store.dispatch('fetchAllConversations');
-    // Reset the updatedWithin in the store chat list filter after fetching conversations when the user is reconnected
-    await this.store.dispatch('updateChatListFilters', {
+      page: 1,
       updatedWithin: null,
+    });
+    await this.store.dispatch('fetchAllConversations', {
+      replaceExisting: true,
     });
   };
 
   fetchFilteredOrSavedConversations = async queryData => {
-    await this.store.dispatch('fetchFilteredConversations', {
-      queryData,
-      page: 1,
-    });
+    try {
+      await this.store.dispatch('fetchFilteredConversations', {
+        queryData,
+        page: 1,
+        replaceExisting: true,
+      });
+    } catch (error) {
+      // Ignore error, reconnect flow should continue
+    }
   };
 
   fetchConversationsOnReconnect = async () => {
@@ -78,9 +80,11 @@ class ReconnectService {
     }
   };
 
-  fetchConversationMessagesOnReconnect = async () => {
-    const { conversation_id: conversationId } = this.router.currentRoute.params;
+  refreshActiveConversationOnReconnect = async () => {
+    const { conversation_id: conversationId } =
+      this.router.currentRoute.value.params;
     if (conversationId) {
+      await this.store.dispatch('getConversation', Number(conversationId));
       await this.store.dispatch('syncActiveConversationMessages', {
         conversationId: Number(conversationId),
       });
@@ -103,21 +107,20 @@ class ReconnectService {
   };
 
   handleRouteSpecificFetch = async () => {
-    const currentRoute = this.router.currentRoute.name;
+    const currentRoute = this.router.currentRoute.value.name;
     if (isAConversationRoute(currentRoute, true)) {
       await this.fetchConversationsOnReconnect();
-      await this.fetchConversationMessagesOnReconnect();
+      await this.refreshActiveConversationOnReconnect();
     } else if (isAInboxViewRoute(currentRoute, true)) {
       await this.fetchNotificationsOnReconnect(
         this.store.getters['notifications/getNotificationFilters']
       );
-    } else if (isNotificationRoute(currentRoute)) {
-      await this.fetchNotificationsOnReconnect();
     }
   };
 
   setConversationLastMessageId = async () => {
-    const { conversation_id: conversationId } = this.router.currentRoute.params;
+    const { conversation_id: conversationId } =
+      this.router.currentRoute.value.params;
     if (conversationId) {
       await this.store.dispatch('setConversationLastMessageId', {
         conversationId: Number(conversationId),

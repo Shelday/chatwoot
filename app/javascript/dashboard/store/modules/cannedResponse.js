@@ -18,19 +18,41 @@ const getters = {
   getCannedResponses(_state) {
     return _state.records;
   },
+  getSortedCannedResponses(_state) {
+    return sortOrder =>
+      [..._state.records].sort((a, b) => {
+        if (sortOrder === 'asc') {
+          return a.short_code.localeCompare(b.short_code);
+        }
+        return b.short_code.localeCompare(a.short_code);
+      });
+  },
   getUIFlags(_state) {
     return _state.uiFlags;
   },
 };
 
 const actions = {
-  getCannedResponse: async function getCannedResponse(
+  revalidateCannedResponses: async function revalidateCannedResponses(
     { commit },
-    { searchKey } = {}
+    { newKey }
   ) {
+    try {
+      const isExistingKeyValid =
+        await CannedResponseAPI.validateCacheKey(newKey);
+      if (!isExistingKeyValid) {
+        const response = await CannedResponseAPI.refetchAndCommit(newKey);
+        commit(types.default.SET_CANNED, response.data);
+      }
+    } catch (error) {
+      // Ignore error
+    }
+  },
+
+  getCannedResponse: async function getCannedResponse({ commit }) {
     commit(types.default.SET_CANNED_UI_FLAG, { fetchingList: true });
     try {
-      const response = await CannedResponseAPI.get({ searchKey });
+      const response = await CannedResponseAPI.get(true);
       commit(types.default.SET_CANNED, response.data);
       commit(types.default.SET_CANNED_UI_FLAG, { fetchingList: false });
     } catch (error) {

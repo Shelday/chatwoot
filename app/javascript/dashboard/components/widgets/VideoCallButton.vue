@@ -1,24 +1,13 @@
-<template>
-  <woot-button
-    v-if="isVideoIntegrationEnabled"
-    v-tooltip.top-end="
-      $t('INTEGRATION_SETTINGS.DYTE.START_VIDEO_CALL_HELP_TEXT')
-    "
-    icon="video"
-    :is-loading="isLoading"
-    color-scheme="secondary"
-    variant="smooth"
-    size="small"
-    @click="onClick"
-  />
-</template>
 <script>
 import { mapGetters } from 'vuex';
 import DyteAPI from 'dashboard/api/integrations/dyte';
-import alertMixin from 'shared/mixins/alertMixin';
+import { useAlert } from 'dashboard/composables';
+import NextButton from 'dashboard/components-next/button/Button.vue';
 
 export default {
-  mixins: [alertMixin],
+  components: {
+    NextButton,
+  },
   props: {
     conversationId: {
       type: Number,
@@ -42,12 +31,22 @@ export default {
     }
   },
   methods: {
+    createErrorMessage(error) {
+      const responseError = error?.response?.data?.error;
+      if (typeof responseError === 'string') return responseError;
+
+      return (
+        responseError?.error?.message ||
+        responseError?.message ||
+        this.$t('INTEGRATION_SETTINGS.DYTE.CREATE_ERROR')
+      );
+    },
     async onClick() {
       this.isLoading = true;
       try {
         await DyteAPI.createAMeeting(this.conversationId);
       } catch (error) {
-        this.showAlert(this.$t('INTEGRATION_SETTINGS.DYTE.CREATE_ERROR'));
+        useAlert(this.createErrorMessage(error));
       } finally {
         this.isLoading = false;
       }
@@ -55,3 +54,18 @@ export default {
   },
 };
 </script>
+
+<!-- eslint-disable-next-line vue/no-root-v-if -->
+<template>
+  <NextButton
+    v-if="isVideoIntegrationEnabled"
+    v-tooltip.top-end="
+      $t('INTEGRATION_SETTINGS.DYTE.START_VIDEO_CALL_HELP_TEXT')
+    "
+    icon="i-ph-video-camera"
+    slate
+    faded
+    sm
+    @click="onClick"
+  />
+</template>

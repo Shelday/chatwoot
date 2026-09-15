@@ -42,14 +42,12 @@ class Notification::PushNotificationService
     app_account_conversation_url(account_id: conversation.account_id, id: conversation.display_id)
   end
 
-  def send_browser_push?(subscription)
+  def can_send_browser_push?(subscription)
     VapidService.public_key && subscription.browser_push?
   end
 
-  def send_browser_push(subscription)
-    return unless send_browser_push?(subscription)
-
-    WebPush.payload_send(
+  def browser_push_payload(subscription)
+    {
       message: JSON.generate(push_message),
       endpoint: subscription.subscription_attributes['endpoint'],
       p256dh: subscription.subscription_attributes['p256dh'],
@@ -62,11 +60,31 @@ class Notification::PushNotificationService
       ssl_timeout: 5,
       open_timeout: 5,
       read_timeout: 5
-    )
-  rescue WebPush::ExpiredSubscription
-    subscription.destroy!
-  rescue Errno::ECONNRESET, Net::OpenTimeout, Net::ReadTimeout => e
-    Rails.logger.error "WebPush operation error: #{e.message}"
+    }
+  end
+
+  def send_browser_push(subscription)
+    return unless can_send_browser_push?(subscription)
+
+    WebPush.payload_send(**browser_push_payload(subscription))
+    Rails.logger.info("Browser push sent to #{user.email} with title #{push_message[:title]}")
+  rescue StandardError => e
+    handle_browser_push_error(e, subscription)
+  end
+
+  def handle_browser_push_error(error, subscription)
+    case error
+    when WebPush::ExpiredSubscription, WebPush::InvalidSubscription, WebPush::Unauthorized
+      Rails.logger.info "WebPush subscription expired: #{error.message}"
+      subscription.destroy!
+    when WebPush::TooManyRequests
+      Rails.logger.warn "WebPush rate limited for #{user.email} on account #{notification.account.id}: #{error.message}"
+    when Errno::ECONNRESET, Net::OpenTimeout, Net::ReadTimeout, Socket::ResolutionError
+      Rails.logger.error "WebPush operation error: #{error.message}"
+    else
+      ChatwootExceptionTracker.new(error, account: notification.account).capture_exception
+      true
+    end
   end
 
   def send_fcm_push(subscription)
@@ -98,7 +116,11 @@ class Notification::PushNotificationService
   end
 
   def remove_subscription_if_error(subscription, response)
-    subscription.destroy! if JSON.parse(response[:body])['results']&.first&.keys&.include?('error')
+    if JSON.parse(response[:body])['results']&.first&.keys&.include?('error')
+      subscription.destroy!
+    else
+      Rails.logger.info("FCM push sent to #{user.email} with title #{push_message[:title]}")
+    end
   end
 
   def fcm_options(subscription)

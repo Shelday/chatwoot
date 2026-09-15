@@ -4,10 +4,10 @@ describe('#AssignableAgentsAPI', () => {
   describe('API calls', () => {
     const originalAxios = window.axios;
     const axiosMock = {
-      post: jest.fn(() => Promise.resolve()),
-      get: jest.fn(() => Promise.resolve()),
-      patch: jest.fn(() => Promise.resolve()),
-      delete: jest.fn(() => Promise.resolve()),
+      post: vi.fn(() => Promise.resolve()),
+      get: vi.fn(() => Promise.resolve()),
+      patch: vi.fn(() => Promise.resolve()),
+      delete: vi.fn(() => Promise.resolve()),
     };
 
     beforeEach(() => {
@@ -23,6 +23,18 @@ describe('#AssignableAgentsAPI', () => {
       expect(axiosMock.get).toHaveBeenCalledWith('/api/v1/assignable_agents', {
         params: {
           inbox_ids: [1],
+        },
+      });
+    });
+
+    it('#getAssignableAgents with AI assignees', () => {
+      assignableAgentsAPI.get([1], {
+        includeAIAssignees: true,
+      });
+      expect(axiosMock.get).toHaveBeenCalledWith('/api/v1/assignable_agents', {
+        params: {
+          inbox_ids: [1],
+          include_ai_assignees: true,
         },
       });
     });

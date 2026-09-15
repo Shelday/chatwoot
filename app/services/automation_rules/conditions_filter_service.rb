@@ -113,6 +113,7 @@ class AutomationRules::ConditionsFilterService < FilterService
     query_operator = query_hash['query_operator']
 
     attribute_key = 'processed_message_content' if attribute_key == 'content'
+    attribute_key = 'private' if attribute_key == 'private_note'
 
     filter_operator_value = filter_operation(query_hash, current_index)
 
@@ -144,21 +145,31 @@ class AutomationRules::ConditionsFilterService < FilterService
   def conversation_query_string(table_name, current_filter, query_hash, current_index)
     attribute_key = query_hash['attribute_key']
     query_operator = query_hash['query_operator']
+
+    if attribute_key == 'assignee_id' && query_hash['filter_operator'].in?(%w[is_present is_not_present])
+      return assignee_presence_filter(table_name, query_hash)
+    end
+
+    return " #{tag_filter_query(query_hash, current_index)} " if attribute_key == 'labels'
+
     filter_operator_value = filter_operation(query_hash, current_index)
 
     case current_filter['attribute_type']
     when 'additional_attributes'
       " #{table_name}.additional_attributes ->> '#{attribute_key}' #{filter_operator_value} #{query_operator} "
     when 'standard'
-      if attribute_key == 'labels'
-        " tags.id #{filter_operator_value} #{query_operator} "
-      else
-        " #{table_name}.#{attribute_key} #{filter_operator_value} #{query_operator} "
-      end
+      " #{table_name}.#{attribute_key} #{filter_operator_value} #{query_operator} "
     end
   end
 
   private
+
+  def filter_config
+    {
+      entity: 'Conversation',
+      table_name: 'conversations'
+    }
+  end
 
   def base_relation
     records = Conversation.where(id: @conversation.id).joins(
@@ -166,6 +177,7 @@ class AutomationRules::ConditionsFilterService < FilterService
     ).joins(
       'LEFT OUTER JOIN messages on messages.conversation_id = conversations.id'
     )
+
     records = records.where(messages: { id: @options[:message].id }) if @options[:message].present?
     records
   end

@@ -31,6 +31,7 @@ RSpec.describe 'Conversation Messages API', type: :request do
              as: :json
 
         expect(response).to have_http_status(:success)
+        expect(response).to conform_schema(200)
         expect(conversation.messages.count).to eq(1)
         expect(conversation.messages.first.content).to eq(params[:content])
       end
@@ -48,6 +49,22 @@ RSpec.describe 'Conversation Messages API', type: :request do
         json_response = response.parsed_body
 
         expect(json_response['error']).to eq('Validation failed: Content is too long (maximum is 150000 characters)')
+      end
+
+      it 'returns a customer-safe error when the database query is canceled' do
+        message_builder = instance_double(Messages::MessageBuilder)
+        allow(Messages::MessageBuilder).to receive(:new).and_return(message_builder)
+        allow(message_builder).to receive(:perform)
+          .and_raise(ActiveRecord::QueryCanceled, 'PG::QueryCanceled: ERROR: canceling statement due to statement timeout')
+
+        post api_v1_account_conversation_messages_url(account_id: account.id, conversation_id: conversation.display_id),
+             params: { content: 'test-message', private: true },
+             headers: agent.create_new_auth_token,
+             as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body['error']).to eq(I18n.t('errors.database.query_canceled'))
+        expect(response.parsed_body['error']).not_to include('PG::QueryCanceled')
       end
 
       it 'creates an outgoing text message with a specific bot sender' do
@@ -84,7 +101,6 @@ RSpec.describe 'Conversation Messages API', type: :request do
       context 'when api inbox' do
         let(:api_channel) { create(:channel_api, account: account) }
         let(:api_inbox) { create(:inbox, channel: api_channel, account: account) }
-        let(:inbox_member) { create(:inbox_member, user: agent, inbox: api_inbox) }
         let(:conversation) { create(:conversation, inbox: api_inbox, account: account) }
 
         it 'reopens the conversation with new incoming message' do
@@ -103,7 +119,13 @@ RSpec.describe 'Conversation Messages API', type: :request do
           expect(Conversations::ActivityMessageJob)
             .to(have_been_enqueued.at_least(:once)
               .with(conversation, { account_id: conversation.account_id, inbox_id: conversation.inbox_id, message_type: :activity,
-                                    content: 'System reopened the conversation due to a new incoming message.' }))
+                                    content: 'System reopened the conversation due to a new incoming message.',
+                                    content_attributes: {
+                                      activity: {
+                                        type: 'conversation_status_changed',
+                                        status: 'open'
+                                      }
+                                    } }))
         end
       end
     end
@@ -127,7 +149,7 @@ RSpec.describe 'Conversation Messages API', type: :request do
 
       it 'creates a new outgoing input select message' do
         create(:agent_bot_inbox, inbox: inbox, agent_bot: agent_bot)
-        select_item1 = build(:bot_message_select)
+        select_item1 = build(:bot_message_select).merge(description: 'First option description')
         select_item2 = build(:bot_message_select)
         params = { content_type: 'input_select', content_attributes: { items: [select_item1, select_item2] } }
 
@@ -140,6 +162,7 @@ RSpec.describe 'Conversation Messages API', type: :request do
         expect(conversation.messages.count).to eq(1)
         expect(conversation.messages.first.content_type).to eq(params[:content_type])
         expect(conversation.messages.first.content).to be_nil
+        expect(conversation.messages.first.content_attributes['items'].first['description']).to eq('First option description')
       end
 
       it 'creates a new outgoing cards message' do
@@ -183,6 +206,7 @@ RSpec.describe 'Conversation Messages API', type: :request do
             as: :json
 
         expect(response).to have_http_status(:success)
+        expect(response).to conform_schema(200)
         expect(JSON.parse(response.body, symbolize_names: true)[:meta][:contact][:id]).to eq(conversation.contact_id)
       end
     end
@@ -215,6 +239,21 @@ RSpec.describe 'Conversation Messages API', type: :request do
         expect(message.reload.content).to eq 'This message was deleted'
         expect(message.reload.deleted).to be true
         expect(message.reload.content_attributes['bcc_emails']).to be_nil
+      end
+
+      it 'deletes interactive messages' do
+        interactive_message = create(
+          :message, message_type: :outgoing, content: 'test', content_type: 'input_select',
+                    content_attributes: { 'items' => [{ 'title' => 'test', 'value' => 'test' }] },
+                    conversation: conversation
+        )
+
+        delete "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/messages/#{interactive_message.id}",
+               headers: agent.create_new_auth_token,
+               as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(interactive_message.reload.deleted).to be true
       end
     end
 
@@ -276,6 +315,69 @@ RSpec.describe 'Conversation Messages API', type: :request do
              as: :json
 
         expect(response).to have_http_status(:unprocessable_entity)
+      end
+    end
+  end
+
+  describe 'PATCH /api/v1/accounts/{account.id}/conversations/:conversation_id/messages/:id' do
+    let(:api_channel) { create(:channel_api, account: account) }
+    let(:api_inbox) { create(:inbox, channel: api_channel, account: account) }
+    let(:agent) { create(:user, account: account, role: :agent) }
+    let!(:conversation) { create(:conversation, inbox: api_inbox, account: account) }
+    let!(:message) { create(:message, conversation: conversation, account: account, status: :sent) }
+
+    context 'when unauthenticated' do
+      it 'returns unauthorized' do
+        patch api_v1_account_conversation_message_url(account_id: account.id, conversation_id: conversation.display_id, id: message.id)
+        expect(response).to have_http_status(:unauthorized)
+      end
+    end
+
+    context 'when authenticated agent' do
+      context 'when agent has non-API inbox' do
+        let(:inbox) { create(:inbox, account: account) }
+        let(:agent) { create(:user, account: account, role: :agent) }
+        let!(:conversation) { create(:conversation, inbox: inbox, account: account) }
+
+        before { create(:inbox_member, inbox: inbox, user: agent) }
+
+        it 'returns forbidden' do
+          patch api_v1_account_conversation_message_url(
+            account_id: account.id,
+            conversation_id: conversation.display_id,
+            id: message.id
+          ), params: { status: 'failed', external_error: 'err' }, headers: agent.create_new_auth_token, as: :json
+          expect(response).to have_http_status(:forbidden)
+        end
+      end
+
+      context 'when agent has API inbox' do
+        before { create(:inbox_member, inbox: api_inbox, user: agent) }
+
+        it 'uses StatusUpdateService to perform status update' do
+          service = instance_double(Messages::StatusUpdateService)
+          expect(Messages::StatusUpdateService).to receive(:new)
+            .with(message, 'failed', 'err123')
+            .and_return(service)
+          expect(service).to receive(:perform)
+          patch api_v1_account_conversation_message_url(
+            account_id: account.id,
+            conversation_id: conversation.display_id,
+            id: message.id
+          ), params: { status: 'failed', external_error: 'err123' }, headers: agent.create_new_auth_token, as: :json
+        end
+
+        it 'updates status to failed with external_error' do
+          patch api_v1_account_conversation_message_url(
+            account_id: account.id,
+            conversation_id: conversation.display_id,
+            id: message.id
+          ), params: { status: 'failed', external_error: 'err123' }, headers: agent.create_new_auth_token, as: :json
+
+          expect(response).to have_http_status(:success)
+          expect(message.reload.status).to eq('failed')
+          expect(message.reload.external_error).to eq('err123')
+        end
       end
     end
   end

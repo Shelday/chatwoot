@@ -24,10 +24,10 @@ describe('#ConversationAPI', () => {
   describe('API calls', () => {
     const originalAxios = window.axios;
     const axiosMock = {
-      post: jest.fn(() => Promise.resolve()),
-      get: jest.fn(() => Promise.resolve()),
-      patch: jest.fn(() => Promise.resolve()),
-      delete: jest.fn(() => Promise.resolve()),
+      post: vi.fn(() => Promise.resolve()),
+      get: vi.fn(() => Promise.resolve()),
+      patch: vi.fn(() => Promise.resolve()),
+      delete: vi.fn(() => Promise.resolve()),
     };
 
     beforeEach(() => {
@@ -90,10 +90,17 @@ describe('#ConversationAPI', () => {
     });
 
     it('#assignAgent', () => {
-      conversationAPI.assignAgent({ conversationId: 12, agentId: 34 });
+      conversationAPI.assignAgent({
+        conversationId: 12,
+        agentId: 34,
+        assigneeType: 'AgentBot',
+      });
       expect(axiosMock.post).toHaveBeenCalledWith(
-        `/api/v1/conversations/12/assignments?assignee_id=34`,
-        {}
+        `/api/v1/conversations/12/assignments`,
+        {
+          assignee_id: 34,
+          assignee_type: 'AgentBot',
+        }
       );
     });
 
